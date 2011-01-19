@@ -77,6 +77,17 @@ if ENV['ENABLE_DEFAULT_UNICODE_TYPES'] != 'false'
   ActiveRecord::ConnectionAdapters::SQLServerAdapter.enable_default_unicode_types = true
 end
 
+# Change the text database type to support ActiveRecord's tests for = on text columns which 
+# is not supported in SQL Server text columns, so use varchar(8000) instead.
+
+if ActiveRecord::Base.connection.sqlserver_2000?
+  if ActiveRecord::ConnectionAdapters::SQLServerAdapter.enable_default_unicode_types
+    ActiveRecord::ConnectionAdapters::SQLServerAdapter.native_text_database_type = 'nvarchar(4000)'
+  else
+    ActiveRecord::ConnectionAdapters::SQLServerAdapter.native_text_database_type = 'varchar(8000)'
+  end
+end
+
 # Our changes/additions to ActiveRecord test helpers specific for SQL Server.
 
 ActiveRecord::Base.connection.class.class_eval do
@@ -96,6 +107,7 @@ module ActiveRecord
       def connection_mode_dblib? ; ActiveRecord::Base.connection.instance_variable_get(:@connection_options)[:mode] == :dblib ; end
       def connection_mode_odbc? ; ActiveRecord::Base.connection.instance_variable_get(:@connection_options)[:mode] == :odbc ; end
       def connection_mode_adonet? ; ActiveRecord::Base.connection.instance_variable_get(:@connection_options)[:mode] == :adonet ; end
+      def sqlserver_2000? ; ActiveRecord::Base.connection.sqlserver_2000? ; end
       def sqlserver_2005? ; ActiveRecord::Base.connection.sqlserver_2005? ; end
       def sqlserver_2008? ; ActiveRecord::Base.connection.sqlserver_2008? ; end
       def ruby_19? ; RUBY_VERSION >= '1.9' ; end
@@ -113,6 +125,7 @@ module ActiveRecord
     def connection_mode_dblib? ; self.class.connection_mode_dblib? ; end
     def connection_mode_odbc? ; self.class.connection_mode_odbc? ; end
     def connection_mode_adonet? ; self.class.connection_mode_adonet? ; end
+    def sqlserver_2000? ; self.class.sqlserver_2000? ; end
     def sqlserver_2005? ; self.class.sqlserver_2005? ; end
     def sqlserver_2008? ; self.class.sqlserver_2008? ; end
     def ruby_19? ; self.class.ruby_19? ; end

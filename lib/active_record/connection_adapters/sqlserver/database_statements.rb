@@ -207,7 +207,7 @@ module ActiveRecord
           @update_sql = true
           case @connection_options[:mode]
           when :dblib
-            execute(sql, name)
+            sqlserver_2000? ? execute(sql, name) && select_value('SELECT @@ROWCOUNT AS AffectedRows') : execute(sql, name)
           else
             execute(sql, name)
             select_value('SELECT @@ROWCOUNT AS AffectedRows')

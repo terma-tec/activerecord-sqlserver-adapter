@@ -45,15 +45,19 @@ ActiveRecord::Schema.define do
     t.column :ntext_10,       :ntext,     :limit => 10
     t.column :nchar_10,       :nchar,     :limit => 10
     t.column :nvarchar_100,   :nvarchar,  :limit => 100
-    t.column :nvarchar_max,     :nvarchar_max 
-    t.column :nvarchar_max_10,  :nvarchar_max, :limit => 10
+    if ActiveRecord::Base.connection.sqlserver_2005? || ActiveRecord::Base.connection.sqlserver_2008?
+      t.column :nvarchar_max,     :nvarchar_max 
+      t.column :nvarchar_max_10,  :nvarchar_max, :limit => 10
+    end
   end
   
   create_table :sql_server_strings, :force => true do |t|
     t.column :char,     :char
     t.column :char_10,  :char,  :limit => 10
-    t.column :varchar_max,     :varchar_max 
-    t.column :varchar_max_10,  :varchar_max, :limit => 10
+    if ActiveRecord::Base.connection.sqlserver_2005? || ActiveRecord::Base.connection.sqlserver_2008?
+      t.column :varchar_max,     :varchar_max 
+      t.column :varchar_max_10,  :varchar_max, :limit => 10
+    end
   end
   
   create_table :sql_server_binary_types, :force => true do |t|
@@ -68,7 +72,7 @@ ActiveRecord::Schema.define do
   end
   
   execute %|ALTER TABLE [sql_server_edge_schemas] ADD [guid_newid] uniqueidentifier DEFAULT NEWID();|
-  execute %|ALTER TABLE [sql_server_edge_schemas] ADD [guid_newseqid] uniqueidentifier DEFAULT NEWSEQUENTIALID();|
+  execute %|ALTER TABLE [sql_server_edge_schemas] ADD [guid_newseqid] uniqueidentifier DEFAULT NEWSEQUENTIALID();| unless ActiveRecord::Base.connection.sqlserver_2000?
   
   create_table 'quoted-table', :force => true do |t|
   end

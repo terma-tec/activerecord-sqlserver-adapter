@@ -166,7 +166,7 @@ module ActiveRecord
       ADAPTER_NAME                = 'SQLServer'.freeze
       VERSION                     = '3.0.9'.freeze
       DATABASE_VERSION_REGEXP     = /Microsoft SQL Server\s+(\d{4})/
-      SUPPORTED_VERSIONS          = [2005,2008].freeze
+      SUPPORTED_VERSIONS          = [2000,2005,2008].freeze
       
       attr_reader :database_version, :database_year,
                   :connection_supports_native_types
@@ -277,6 +277,10 @@ module ActiveRecord
         true
       end
       
+      def sqlserver_2000?
+        @database_year == 2000
+      end
+      
       def sqlserver_2005?
         @database_year == 2005
       end
@@ -302,7 +306,12 @@ module ActiveRecord
       end
       
       def native_text_database_type
-        @@native_text_database_type || enable_default_unicode_types ? 'nvarchar(max)' : 'varchar(max)'
+        @@native_text_database_type || 
+        if sqlserver_2005? || sqlserver_2008?
+          enable_default_unicode_types ? 'nvarchar(max)' : 'varchar(max)'
+        else
+          enable_default_unicode_types ? 'ntext' : 'text'
+        end
       end
       
       def native_time_database_type
@@ -314,7 +323,7 @@ module ActiveRecord
       end
       
       def native_binary_database_type
-        @@native_binary_database_type || 'varbinary(max)'
+        @@native_binary_database_type || ((sqlserver_2005? || sqlserver_2008?) ? 'varbinary(max)' : 'image')
       end
       
       def cs_equality_operator

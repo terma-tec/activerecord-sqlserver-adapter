@@ -125,10 +125,12 @@ class SpecificSchemaTestSqlserver < ActiveRecord::TestCase
         assert newid_column.default_function.present?
         assert_nil newid_column.default
         assert_equal 'newid()', newid_column.default_function
-        newseqid_column = @edge_class.columns_hash['guid_newseqid']
-        assert newseqid_column.default_function.present?
-        assert_nil newseqid_column.default
-        assert_equal 'newsequentialid()', newseqid_column.default_function
+        unless ActiveRecord::Base.connection.sqlserver_2000?
+          newseqid_column = @edge_class.columns_hash['guid_newseqid']
+          assert newseqid_column.default_function.present?
+          assert_nil newseqid_column.default
+          assert_equal 'newsequentialid()', newseqid_column.default_function
+        end
       end
       
       should 'use model callback to set get a new guid' do
