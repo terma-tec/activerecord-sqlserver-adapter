@@ -236,11 +236,11 @@ module ActiveRecord
       end
       
       def native_string_database_type
-        @@native_string_database_type || (enable_default_unicode_types ? 'nvarchar' : 'varchar') 
+        @@native_string_database_type || (enable_default_unicode_types ? 'nvarchar' : 'varchar')
       end
       
       def native_text_database_type
-        @@native_text_database_type || 
+        @@native_text_database_type ||
         if sqlserver_2005? || sqlserver_2008?
           enable_default_unicode_types ? 'nvarchar(max)' : 'varchar(max)'
         else
@@ -283,7 +283,7 @@ module ActiveRecord
       end
       
       def quote_column_name(name)
-        @sqlserver_quoted_column_and_table_names[name] ||= 
+        @sqlserver_quoted_column_and_table_names[name] ||=
           name.to_s.split('.').map{ |n| n =~ /^\[.*\]$/ ? n : "[#{n}]" }.join('.')
       end
       
@@ -355,7 +355,7 @@ module ActiveRecord
       
       def user_options
         info_schema_query do
-          select_rows("dbcc useroptions").inject(HashWithIndifferentAccess.new) do |values,row| 
+          select_rows("dbcc useroptions").inject(HashWithIndifferentAccess.new) do |values,row|
             set_option = row[0].gsub(/\s+/,'_')
             user_value = row[1]
             values[set_option] = user_value
@@ -371,7 +371,7 @@ module ActiveRecord
         initial_isolation_level = user_options[:isolation_level] || "READ COMMITTED"
         do_execute "SET TRANSACTION ISOLATION LEVEL #{isolation_level}"
         begin
-          yield 
+          yield
         ensure
           do_execute "SET TRANSACTION ISOLATION LEVEL #{initial_isolation_level}"
         end if block_given?
@@ -577,12 +577,12 @@ module ActiveRecord
       
       def tables(name = nil)
         info_schema_query do
-          select_values "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME <> 'dtproperties'"
+          select_values "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME <> 'dtproperties' AND TABLE_SCHEMA = schema_name()"
         end
       end
       
       def views(name = nil)
-        @sqlserver_views_cache ||= 
+        @sqlserver_views_cache ||=
           info_schema_query { select_values("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME NOT IN ('sysconstraints','syssegments')") }
       end
       
@@ -630,7 +630,7 @@ module ActiveRecord
       
       def columns(table_name, name = nil)
         return [] if table_name.blank?
-        cache_key = unqualify_table_name(table_name)
+        cache_key = columns_cache_key(table_name)
         @sqlserver_columns_cache[cache_key] ||= column_definitions(table_name).collect do |ci|
           sqlserver_options = ci.except(:name,:default_value,:type,:null).merge(:database_year=>database_year)
           SQLServerColumn.new ci[:name], ci[:default_value], ci[:type], ci[:null], sqlserver_options
@@ -815,7 +815,7 @@ module ActiveRecord
                         login_timeout = config[:login_timeout].present? ? config[:login_timeout].to_i : nil
                         timeout = config[:timeout].present? ? config[:timeout].to_i/1000 : nil
                         encoding = config[:encoding].present? ? config[:encoding] : nil
-                        TinyTds::Client.new({ 
+                        TinyTds::Client.new({
                           :dataserver    => config[:dataserver],
                           :username      => config[:username],
                           :password      => config[:password],
@@ -1028,14 +1028,14 @@ module ActiveRecord
               handle.each_hash || []
             else
               row = handle.fetch_hash
-              rows = row ? [row] : [[]]                    
+              rows = row ? [row] : [[]]
             end
           else
             rows = if options[:fetch] == :all
                      handle.fetch_all || []
                    else
                      row = handle.fetch
-                     row ? [row] : [[]]                     
+                     row ? [row] : [[]]
                    end
             names = handle.columns(true).map{ |c| c.name }
             names_and_values = []
@@ -1203,6 +1203,10 @@ module ActiveRecord
         table_name.to_s.split('.').last.gsub(/[\[\]]/,'')
       end
       
+      def unqualify_table_schema(table_name)
+        table_name.to_s.split('.')[-2].gsub(/[\[\]]/,'') rescue nil
+      end
+      
       def unqualify_db_name(table_name)
         table_names = table_name.to_s.split('.')
         table_names.length == 3 ? table_names.first.tr('[]','') : nil
@@ -1253,9 +1257,19 @@ module ActiveRecord
       end
       
       def remove_sqlserver_columns_cache_for(table_name)
-        cache_key = unqualify_table_name(table_name)
+        cache_key = columns_cache_key(table_name)
         @sqlserver_columns_cache[cache_key] = nil
         initialize_sqlserver_caches(false)
+      end
+      
+      def columns_cache_key(table_name)
+        table_schema = unqualify_table_schema(table_name)
+        table_name = unqualify_table_name(table_name)
+        if table_schema
+          "#{table_schema}.#{table_name}"
+        else
+          table_name
+        end
       end
       
       def initialize_sqlserver_caches(reset_columns=true)
@@ -1293,6 +1307,7 @@ module ActiveRecord
       def column_definitions(table_name)
         db_name = unqualify_db_name(table_name)
         db_name_with_period = "#{db_name}." if db_name
+        table_schema = unqualify_table_schema(table_name)
         table_name = unqualify_table_name(table_name)
         sql = %{
           SELECT
@@ -1311,11 +1326,15 @@ module ActiveRecord
             ELSE NULL
           END as is_nullable,
           CASE
-            WHEN COLUMNPROPERTY(OBJECT_ID(columns.TABLE_SCHEMA+'.'+columns.TABLE_NAME), columns.COLUMN_NAME, 'IsIdentity') = 0 THEN NULL
+            WHEN sys_columns.is_identity = 0 THEN NULL
             ELSE 1
           END as is_identity
           FROM #{db_name_with_period}INFORMATION_SCHEMA.COLUMNS columns
+            INNER JOIN #{db_name_with_period}sys.columns sys_columns
+    					ON sys_columns.object_id = OBJECT_ID(columns.TABLE_CATALOG + '.' + columns.TABLE_SCHEMA+'.'+columns.TABLE_NAME)
+    					  AND sys_columns.name = columns.COLUMN_NAME
           WHERE columns.TABLE_NAME = '#{table_name}'
+            AND columns.TABLE_SCHEMA = #{table_schema.nil? ? "schema_name() " : "'#{table_schema}' "}
           ORDER BY columns.ordinal_position
         }.gsub(/[ \t\r\n]+/,' ')
         results = info_schema_query { select(sql,nil) }
